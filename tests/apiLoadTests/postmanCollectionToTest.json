@@ -1,0 +1,82 @@
+{
+	"info": {
+		"_postman_id": "243eb23e-ab1b-44e5-85ac-641811c9af2d",
+		"name": "ApiLoadTesting",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "GetCatalogs",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://epamapi.azurewebsites.net/api/catalog-brands",
+					"protocol": "https",
+					"host": [
+						"epamapi",
+						"azurewebsites",
+						"net"
+					],
+					"path": [
+						"api",
+						"catalog-brands"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "getCatalogItem",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://epamapi.azurewebsites.net/api/catalog-items/1",
+					"protocol": "https",
+					"host": [
+						"epamapi",
+						"azurewebsites",
+						"net"
+					],
+					"path": [
+						"api",
+						"catalog-items",
+						"1"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "auth",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n  \"username\": \"demouser@microsoft.com\",\r\n  \"password\": \"Pass@word1\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://epamapi.azurewebsites.net/api/authenticate",
+					"protocol": "https",
+					"host": [
+						"epamapi",
+						"azurewebsites",
+						"net"
+					],
+					"path": [
+						"api",
+						"authenticate"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
