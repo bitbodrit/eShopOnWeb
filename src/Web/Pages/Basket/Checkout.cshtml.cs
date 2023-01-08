@@ -8,6 +8,7 @@ using Microsoft.eShopWeb.ApplicationCore.Exceptions;
 using Microsoft.eShopWeb.ApplicationCore.Interfaces;
 using Microsoft.eShopWeb.Infrastructure.Identity;
 using Microsoft.eShopWeb.Web.Interfaces;
+using Newtonsoft.Json;
 
 namespace Microsoft.eShopWeb.Web.Pages.Basket;
 
@@ -20,6 +21,8 @@ public class CheckoutModel : PageModel
     private string? _username = null;
     private readonly IBasketViewModelService _basketViewModelService;
     private readonly IAppLogger<CheckoutModel> _logger;
+
+    private const string ReserverUri = "https://aibulatfunction.azurewebsites.net/api/OrderItemsReserver?code=35dyO6L91hq8C_Y1rsQ7sVmJfxqv5qVa6nrxv_P0g3LAAzFuxSisWg==";
 
     public CheckoutModel(IBasketService basketService,
         IBasketViewModelService basketViewModelService,
@@ -56,6 +59,8 @@ public class CheckoutModel : PageModel
             await _basketService.SetQuantities(BasketModel.Id, updateModel);
             await _orderService.CreateOrderAsync(BasketModel.Id, new Address("123 Main St.", "Kent", "OH", "United States", "44240"));
             await _basketService.DeleteBasketAsync(BasketModel.Id);
+
+            await ReserveOrder(items);
         }
         catch (EmptyBasketOnCheckoutException emptyBasketOnCheckoutException)
         {
@@ -65,6 +70,14 @@ public class CheckoutModel : PageModel
         }
 
         return RedirectToPage("Success");
+    }
+
+    private static async Task ReserveOrder(IEnumerable<BasketItemViewModel> items, CancellationToken token = default)
+    {
+        var client = new HttpClient();
+        using var content = new StringContent(JsonConvert.SerializeObject(items), System.Text.Encoding.UTF8, "application/json");
+
+        await client.PostAsync(ReserverUri, content, token);
     }
 
     private async Task SetBasketModelAsync()
