@@ -3,12 +3,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.eShopWeb.ApplicationCore.Entities;
 using Microsoft.eShopWeb.ApplicationCore.Entities.OrderAggregate;
 using Microsoft.eShopWeb.ApplicationCore.Exceptions;
 using Microsoft.eShopWeb.ApplicationCore.Interfaces;
 using Microsoft.eShopWeb.Infrastructure.Identity;
 using Microsoft.eShopWeb.Web.Interfaces;
 using Newtonsoft.Json;
+using NuGet.Common;
 
 namespace Microsoft.eShopWeb.Web.Pages.Basket;
 
@@ -23,6 +25,7 @@ public class CheckoutModel : PageModel
     private readonly IAppLogger<CheckoutModel> _logger;
 
     private const string ReserverUri = "https://aibulatfunction.azurewebsites.net/api/OrderItemsReserver?code=35dyO6L91hq8C_Y1rsQ7sVmJfxqv5qVa6nrxv_P0g3LAAzFuxSisWg==";
+    private const string OrderDetailsSaver = "https://ordersaver.azurewebsites.net/api/OrderSaverService?code=HVi_2QVW1PwNNhJEWULJT_ejnSc5AHlM61wAuofJ3Fd6AzFugZXceA==";
 
     public CheckoutModel(IBasketService basketService,
         IBasketViewModelService basketViewModelService,
@@ -55,12 +58,14 @@ public class CheckoutModel : PageModel
                 return BadRequest();
             }
 
+            var address = new Address("123 Main St.", "Kent", "OH", "United States", "44240");
+
             var updateModel = items.ToDictionary(b => b.Id.ToString(), b => b.Quantity);
             await _basketService.SetQuantities(BasketModel.Id, updateModel);
-            await _orderService.CreateOrderAsync(BasketModel.Id, new Address("123 Main St.", "Kent", "OH", "United States", "44240"));
+            var createdOrder = await _orderService.CreateOrderAsync(BasketModel.Id, address);
             await _basketService.DeleteBasketAsync(BasketModel.Id);
 
-            await ReserveOrder(items);
+            await SaveOrderRecordToDb(createdOrder);
         }
         catch (EmptyBasketOnCheckoutException emptyBasketOnCheckoutException)
         {
@@ -70,6 +75,23 @@ public class CheckoutModel : PageModel
         }
 
         return RedirectToPage("Success");
+    }
+
+    private static async Task SaveOrderRecordToDb(ApplicationCore.Entities.OrderAggregate.Order order, CancellationToken token = default)
+    {
+        var client = new HttpClient();
+
+        var orderRecord = new OrderRecord
+        {
+            Id = Guid.NewGuid(),
+            OrderItems = order.OrderItems,
+            Address = order.ShipToAddress.ToString(),
+            FinalPrice = order.Total()
+        };
+
+        using var content = new StringContent(JsonConvert.SerializeObject(orderRecord), System.Text.Encoding.UTF8, "application/json");
+        
+        await client.PostAsync(OrderDetailsSaver, content, token);
     }
 
     private static async Task ReserveOrder(IEnumerable<BasketItemViewModel> items, CancellationToken token = default)
