@@ -1,4 +1,5 @@
 ﻿using Ardalis.GuardClauses;
+using Azure.Messaging.ServiceBus;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -10,7 +11,6 @@ using Microsoft.eShopWeb.ApplicationCore.Interfaces;
 using Microsoft.eShopWeb.Infrastructure.Identity;
 using Microsoft.eShopWeb.Web.Interfaces;
 using Newtonsoft.Json;
-using NuGet.Common;
 
 namespace Microsoft.eShopWeb.Web.Pages.Basket;
 
@@ -24,8 +24,7 @@ public class CheckoutModel : PageModel
     private readonly IBasketViewModelService _basketViewModelService;
     private readonly IAppLogger<CheckoutModel> _logger;
 
-    private const string ReserverUri = "https://aibulatfunction.azurewebsites.net/api/OrderItemsReserver?code=35dyO6L91hq8C_Y1rsQ7sVmJfxqv5qVa6nrxv_P0g3LAAzFuxSisWg==";
-    private const string OrderDetailsSaver = "https://ordersaver.azurewebsites.net/api/OrderSaverService?code=HVi_2QVW1PwNNhJEWULJT_ejnSc5AHlM61wAuofJ3Fd6AzFugZXceA==";
+    private const string OrderDetailsFunctionUrl = "https://aibulatprocessor.azurewebsites.net/api/DeliveryOrderProcessor?code=9Kjj5Fe1nCrFhxGT5WhohlyLmQJGuoSqUsM4fsfkovKbAzFu1DaovA==";
 
     public CheckoutModel(IBasketService basketService,
         IBasketViewModelService basketViewModelService,
@@ -65,7 +64,8 @@ public class CheckoutModel : PageModel
             var createdOrder = await _orderService.CreateOrderAsync(BasketModel.Id, address);
             await _basketService.DeleteBasketAsync(BasketModel.Id);
 
-            await SaveOrderRecordToDb(createdOrder);
+            await ReserveOrder(createdOrder);
+            await SaveOrderDetails(createdOrder);
         }
         catch (EmptyBasketOnCheckoutException emptyBasketOnCheckoutException)
         {
@@ -77,7 +77,40 @@ public class CheckoutModel : PageModel
         return RedirectToPage("Success");
     }
 
-    private static async Task SaveOrderRecordToDb(ApplicationCore.Entities.OrderAggregate.Order order, CancellationToken token = default)
+    private static async Task ReserveOrder(ApplicationCore.Entities.OrderAggregate.Order createdOrder)
+    {
+        const string ServiceBusConnectionString = "Endpoint=sb://aibulat.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=mjzHjdFMmlD3Wce8lD6OM4EpxwFHyEZuu+ASbHIvDpo=";
+        const string QueueName = "orderqueue";
+
+        await using var client = new ServiceBusClient(ServiceBusConnectionString);
+        await using ServiceBusSender sender = client.CreateSender(QueueName);
+        var orderReserve = new OrderRecord
+        {
+            Id = Guid.NewGuid(),
+            OrderItems = createdOrder.OrderItems,
+            Address = createdOrder.ShipToAddress.ToString(),
+            FinalPrice = createdOrder.Total()
+        };
+
+        try
+        {
+            var content = new BinaryData(JsonConvert.SerializeObject(orderReserve));
+            var message = new ServiceBusMessage(content);
+            Console.WriteLine($"Sending message");
+            await sender.SendMessageAsync(message);
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"{DateTime.Now} :: Exception: {exception.Message}");
+        }
+        finally
+        { 
+            await sender.DisposeAsync();
+            await client.DisposeAsync();
+        }
+    }
+
+    private static async Task SaveOrderDetails(ApplicationCore.Entities.OrderAggregate.Order order, CancellationToken token = default)
     {
         var client = new HttpClient();
 
@@ -91,15 +124,7 @@ public class CheckoutModel : PageModel
 
         using var content = new StringContent(JsonConvert.SerializeObject(orderRecord), System.Text.Encoding.UTF8, "application/json");
         
-        await client.PostAsync(OrderDetailsSaver, content, token);
-    }
-
-    private static async Task ReserveOrder(IEnumerable<BasketItemViewModel> items, CancellationToken token = default)
-    {
-        var client = new HttpClient();
-        using var content = new StringContent(JsonConvert.SerializeObject(items), System.Text.Encoding.UTF8, "application/json");
-
-        await client.PostAsync(ReserverUri, content, token);
+        await client.PostAsync(OrderDetailsFunctionUrl, content, token);
     }
 
     private async Task SetBasketModelAsync()
